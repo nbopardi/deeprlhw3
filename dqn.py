@@ -129,21 +129,25 @@ def learn(env,
     
     # YOUR CODE HERE
     print '-------------------CODE 1---------------'
+    # current q-func
     current_qfunc = q_func(obs_t_float, num_actions, scope = "q_func", reuse = False)
     onehot = tf.one_hot(act_t_ph, num_actions)  
     current_qval = tf.reduce_sum(tf.multiply(current_qfunc, onehot),axis=1) # extract current q val based on current action
 
-    if done_mask_ph == 1:
+   
+    # target q-func
+    next_qfunc = q_func(obs_tp1_float, num_actions, scope = "target_q_func", reuse = False)
 
-        next_qval = rew_t_ph
-    else:
-
-        next_qfunc = q_func(obs_tp1_float, num_actions, scope = "target_q_func", reuse = False)
-        next_qval = rew_t_ph + gamma*tf.reduce_max(next_qfunc)
+    next_a = tf.argmax(tf.stop_gradient(next_qfunc),1)
+    a_mask = tf.one_hot(next_a, num_actions)
+    next_qval = rew_t_ph + gamma*tf.reduce_sum(tf.multiply(a_mask, next_qfunc),1)*(1 - done_mask_ph)
+    next_qval = tf.stop_gradient(next_qval)
 
     print current_qval.shape
     print next_qval.shape
-    total_error = tf.pow(tf.subtract(next_qval, current_qval),2)
+    # total_error = tf.pow(tf.subtract(next_qval, current_qval),2) # MSE
+
+    total_error = tf.reduce_mean(huber_loss(next_qval - current_qval)) # huber loss
 
     q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = "q_func")
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = "target_q_func")
@@ -323,8 +327,10 @@ def learn(env,
             print '3.d'
             if t % target_update_freq == 0:
 
-                num_param_update += 1
                 session.run(update_target_fn)
+                num_param_updates += 1
+                print("Target network parameter update {}".format(num_param_updates))
+
             #####
 
         ### 4. Log progress
