@@ -134,20 +134,26 @@ def learn(env,
     onehot = tf.one_hot(act_t_ph, num_actions)  
     current_qval = tf.reduce_sum(tf.multiply(current_qfunc, onehot),axis=1) # extract current q val based on current action
 
+    action_predict = tf.argmax(current_qfunc, 1)
+    def predict_action(observation):
+
+        return session.run(action_predict, feed_dict = {obs_t_float: observation})[0]
    
     # target q-func
-    next_qfunc = q_func(obs_tp1_float, num_actions, scope = "target_q_func", reuse = False)
-
-    next_a = tf.argmax(tf.stop_gradient(next_qfunc),1)
+    next_qfunc_target = q_func(obs_tp1_float, num_actions, scope = "target_q_func", reuse = False)
+    next_qfunc_action = q_func(obs_tp1_float, num_actions, scope = "q_func", reuse = True)
+    
+    next_a = tf.argmax(tf.stop_gradient(next_qfunc_action),1)
     a_mask = tf.one_hot(next_a, num_actions)
-    next_qval = rew_t_ph + gamma*tf.reduce_sum(tf.multiply(a_mask, next_qfunc),1)*(1 - done_mask_ph)
-    next_qval = tf.stop_gradient(next_qval)
+    next_qval = tf.identity(next_qfunc_target)
+    q_target = rew_t_ph + gamma*tf.reduce_sum(tf.multiply(a_mask, next_qval),1)*(1 - done_mask_ph)
+    q_target = tf.stop_gradient(q_target)
 
     print current_qval.shape
-    print next_qval.shape
+    print q_target.shape
     # total_error = tf.pow(tf.subtract(next_qval, current_qval),2) # MSE
 
-    total_error = tf.reduce_mean(huber_loss(next_qval - current_qval)) # huber loss
+    total_error = tf.reduce_mean(huber_loss(q_target - current_qval)) # huber loss
 
     q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = "q_func")
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = "target_q_func")
@@ -169,6 +175,7 @@ def learn(env,
     # construct the replay buffer
     replay_buffer = ReplayBuffer(replay_buffer_size, frame_history_len)
 
+    saver = tf.train.Saver()
     ###############
     # RUN ENV     #
     ###############
@@ -230,15 +237,14 @@ def learn(env,
             # replay_obs = np.reshape(replay_obs, (1,84,84,4))
             # print type(replay_obs)
             # print replay_obs[0]
-            print type(replay_obs)
-            print replay_obs.shape
+            # print type(replay_obs)
+            # print replay_obs.shape
             # assert replay_obs.shape == (1,84,84,4)
-            act_val = session.run([current_qval], feed_dict = {obs_t_ph: [replay_obs]})
-            action = np.argmax(act_val)
+            # act_val = session.run([current_qfunc], feed_dict = {obs_t_ph: [replay_obs]})
+            action = predict_action(replay_obs[None, :])
 
-        obs, reward, done, info = env.step(action)
+        last_obs, reward, done, info = env.step(action)
 
-        last_obs = obs
         if done:
             last_obs = env.reset()
 
@@ -312,12 +318,14 @@ def learn(env,
                    obs_t_ph: obs_t_batch,
                    obs_tp1_ph: obs_tp1_batch,
                    rew_t_ph: rew_t_batch
-               })
+                })
+                session.run(update_target_fn)
+                model_initialized = True
 
             # 3.c
             print '3.c'
             learning_rate_batch = optimizer_spec.lr_schedule.value(t)
-            _, t_error = session.run([train_fn, total_error], feed_dict = {obs_t_ph: obs_t_batch,
+            t_error, _ = session.run([total_error, train_fn], feed_dict = {obs_t_ph: obs_t_batch,
                                                                            act_t_ph: act_t_batch,
                                                                            rew_t_ph: rew_t_batch, 
                                                                            obs_tp1_ph: obs_tp1_batch, 
@@ -330,6 +338,10 @@ def learn(env,
                 session.run(update_target_fn)
                 num_param_updates += 1
                 print("Target network parameter update {}".format(num_param_updates))
+                
+                model_name = 'RAM model'
+                saver.save(session, model_name, global_step = num_param_updates, write_meta_graph = True)
+                print model_name + ' ' + str(num_param_updates) + ' saved'
 
             #####
 
