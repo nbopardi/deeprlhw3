@@ -339,7 +339,7 @@ def learn(env,
                 num_param_updates += 1
                 print("Target network parameter update {}".format(num_param_updates))
                 
-                model_name = 'RAM model'
+                model_name = 'GAME model'
                 saver.save(session, model_name, global_step = num_param_updates, write_meta_graph = True)
                 print model_name + ' ' + str(num_param_updates) + ' saved'
 
