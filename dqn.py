@@ -91,19 +91,19 @@ def learn(env,
 
     # set up placeholders
     # placeholder for current observation (or state)
-    obs_t_ph              = tf.placeholder(tf.uint8, [None] + list(input_shape))
+    obs_t_ph              = tf.placeholder(tf.uint8, [None] + list(input_shape), name = 'obs_t_ph')
     # placeholder for current action
-    act_t_ph              = tf.placeholder(tf.int32,   [None])
+    act_t_ph              = tf.placeholder(tf.int32,   [None], name = 'act_t_ph')
     # placeholder for current reward
-    rew_t_ph              = tf.placeholder(tf.float32, [None])
+    rew_t_ph              = tf.placeholder(tf.float32, [None], name = 'rew_t_ph')
     # placeholder for next observation (or state)
-    obs_tp1_ph            = tf.placeholder(tf.uint8, [None] + list(input_shape))
+    obs_tp1_ph            = tf.placeholder(tf.uint8, [None] + list(input_shape), name = 'obs_tp1_ph')
     # placeholder for end of episode mask
     # this value is 1 if the next state corresponds to the end of an episode,
     # in which case there is no Q-value at the next state; at the end of an
     # episode, only the current state reward contributes to the target, not the
     # next state Q-value (i.e. target is just rew_t_ph, not rew_t_ph + gamma * q_tp1)
-    done_mask_ph          = tf.placeholder(tf.float32, [None])
+    done_mask_ph          = tf.placeholder(tf.float32, [None], name = 'done_mask_ph')
 
     # casting to float on GPU ensures lower data transfer times.
     obs_t_float   = tf.cast(obs_t_ph,   tf.float32) / 255.0
@@ -130,11 +130,13 @@ def learn(env,
     # YOUR CODE HERE
     print '-------------------CODE 1---------------'
     # current q-func
-    current_qfunc = q_func(obs_t_float, num_actions, scope = "q_func", reuse = False)
-    onehot = tf.one_hot(act_t_ph, num_actions)  
-    current_qval = tf.reduce_sum(tf.multiply(current_qfunc, onehot),axis=1) # extract current q val based on current action
+    with tf.name_scope('current_qfunc'):
+        current_qfunc = q_func(obs_t_float, num_actions, scope = "q_func", reuse = False)
+        tf.identity(current_qfunc, 'current_q_func_op')
+        onehot = tf.one_hot(act_t_ph, num_actions)  
+        current_qval = tf.reduce_sum(tf.multiply(current_qfunc, onehot),axis=1) # extract current q val based on current action
 
-    action_predict = tf.argmax(current_qfunc, 1)
+    action_predict = tf.argmax(current_qfunc, axis = 1, name = 'action_predict')
     def predict_action(observation):
 
         return session.run(action_predict, feed_dict = {obs_t_float: observation})[0]
